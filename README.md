@@ -12,6 +12,10 @@ changing front-end state machine, not a documented endpoint.
 There is also a peer-to-peer transport under the client, because the client ↔ gateway link
 must not depend on a public edge.
 
+And underneath all of it there is a host that has been running the whole stack for two months
+without a single container restart — documented in [`OPERATIONS.md`](OPERATIONS.md), because a
+design that has never been operated is a hypothesis.
+
 ## Why this repository is public
 
 Two roles are relevant to the material here, and neither is proven by line counts.
@@ -32,6 +36,7 @@ liveness, and a metric that says when to stop optimising a path and change topol
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Three-tier topology, event stream contract, extension points, failure modes and what they cost | implemented |
 | [`P2P.md`](P2P.md) | P2P transport: relay-as-floor ordering, libp2p capability audit, custom birthday-paradox rendezvous, measured NAT classes, fallback rules | implemented |
 | [`METRICS.md`](METRICS.md) | 17.8 days of production data: success rate, per-target breakdown, latency percentiles, failure taxonomy | measured |
+| [`OPERATIONS.md`](OPERATIONS.md) | A real host: 16 containers, 66 days uptime, zero restarts, deployment timeline, on-chain agent history, and the one thing that will break first | measured |
 | [`BOXPROXY.md`](BOXPROXY.md) | Runtime substrate for disposable containers: three-layer control plane, single-port addressing, keepalive across three platforms, six measured capability ceilings | implemented, **P2P bridging not built** |
 | [`CAPTCHA.md`](CAPTCHA.md) | Verifying an answer that cannot be read off the image: tolerance bound, measurement baseline that was polluted, differential localization, and the criteria a small model must meet | research, **model not trained** |
 | [`INGRESS-AUTH.md`](INGRESS-AUTH.md) | Admission control for bridged container ingress: three-layer design, per-environment trust boundaries, refusal list, implementation order | **design only, not implemented** |
