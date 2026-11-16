@@ -25,7 +25,7 @@ evidence of design judgement.
 | Ingress admission-control design (`INGRESS-AUTH.md`) | Design of **our own** admission control; the platform routing facts it rests on are already public |
 | Runtime substrate architecture (`BOXPROXY.md`) | Control-plane design over documented platform APIs; no keys, no account identifiers |
 | Operations record (`OPERATIONS.md`): uptime, restart counts, container inventory, resource distribution | Host-level evidence of sustained operation; no addresses, keys, or credentials |
-| Network segmentation record: network count, subnet shape, which class of workload sits where, the dual-homed container, and the host-network decision with its rejected alternative | Docker-assigned subnets and a pattern; no address, port, or provider that a reader could dial |
+| Network segmentation record: network count, subnet shape, which class of workload sits where, the dual-homed container, and the host-network decision with its rejected alternative | Docker-assigned subnets plus the two container addresses that prove the multi-homing — all RFC1918, none routable from outside the host, and no host, public address, or port that a reader could dial. Stated explicitly because "a subnet shape" and "two container addresses" are not the same disclosure |
 | Dual ingress pattern: a CDN tunnel plus a cloud TCP relay, both outbound-dialled | Describes the shape of the ingress, not an endpoint |
 | Chain facts read from a public RPC (tx count, balance, address type, agent id) | Public ledger data, reproducible by anyone with the address |
 
@@ -76,7 +76,7 @@ Only when all three miss does it belong in Zone 1.
 | `CAPTCHA.md` | no — the target is never named and no access path is described | no | no — the scripts are not included, only their results | 1 |
 | `BOXPROXY.md` | no — addresses are shown as templates, never real | no | no | 1 |
 | `INGRESS-AUTH.md` | no — it is admission control for our own system | no | **no, because none of it exists** | 1 |
-| `OPERATIONS.md` | no — no host, no credentials, no access path | **partially** — the truncated address locates one public agent; the host does not | no — the network and ingress sections describe a pattern with every endpoint removed | 1 |
+| `OPERATIONS.md` | no — no host, no credentials, no access path | **partially** — the truncated address locates one public agent; the host does not | no — the network and ingress sections describe a pattern with every endpoint removed, except two RFC1918 container addresses kept because the multi-homing is otherwise unverifiable | 1 |
 
 The third column of `INGRESS-AUTH.md` is the honest answer and also the reason it belongs here:
 a design that has not been implemented cannot be run. This is worth stating because the usual

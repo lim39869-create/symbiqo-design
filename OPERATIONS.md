@@ -175,6 +175,12 @@ Two claims, both testable rather than asserted:
 The second claim is the one that changes with time, so it is a check to re-run, not a fact to
 remember: `docker port` plus the relay config is a two-command audit.
 
+The container addresses in 2.1 are printed on purpose. They are RFC1918 addresses on bridges that
+exist only inside one host with no public address, so they are not reachable from anywhere and
+they are the only way to show that a container really is attached to two networks at once rather
+than that the YAML says so. The host's own address, the relay's address and every published port
+stay out of this file (§8).
+
 ## 3. Deployment timeline, reconstructed from container creation times
 
 Not a plan — the actual order things were brought up, read from `docker inspect`.
