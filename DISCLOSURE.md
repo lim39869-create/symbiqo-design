@@ -24,6 +24,8 @@ evidence of design judgement.
 | Verification methodology for an unreadable answer: tolerance bound, differential localization, discrimination curve | Measurement method and negative results; names no target and describes no access path |
 | Ingress admission-control design (`INGRESS-AUTH.md`) | Design of **our own** admission control; the platform routing facts it rests on are already public |
 | Runtime substrate architecture (`BOXPROXY.md`) | Control-plane design over documented platform APIs; no keys, no account identifiers |
+| Operations record (`OPERATIONS.md`): uptime, restart counts, container inventory, resource distribution | Host-level evidence of sustained operation; no addresses, keys, or credentials |
+| Chain facts read from a public RPC (tx count, balance, address type, agent id) | Public ledger data, reproducible by anyone with the address |
 
 ## Zone 2 — publish after redaction
 
@@ -48,6 +50,9 @@ Valuable, but the raw form leaks production environment or third-party detail.
 | Concrete model/target mapping table | Operational information, not design information |
 | Which target the verification methodology applies to, and how a session is reached | Questions 1 and 3: it would hand over both the target and the entry method |
 | Grant keys, allowlists, per-environment secrets, bridge identities | Security; and question 3 |
+| The live public domain and tunnel hostnames | Ties a job application to a running commercial service; the operational record stands without it |
+| The full wallet address, in the published version | Links a public identity to an on-chain history; truncated to `0xbc33…b75f` |
+| Internal addressing, SSH access paths, ports | Question 3: directly actionable |
 
 ---
 
@@ -68,6 +73,7 @@ Only when all three miss does it belong in Zone 1.
 | `CAPTCHA.md` | no — the target is never named and no access path is described | no | no — the scripts are not included, only their results | 1 |
 | `BOXPROXY.md` | no — addresses are shown as templates, never real | no | no | 1 |
 | `INGRESS-AUTH.md` | no — it is admission control for our own system | no | **no, because none of it exists** | 1 |
+| `OPERATIONS.md` | no — no host, no credentials, no access path | **partially** — the truncated address locates one public agent; the host does not | no | 1 |
 
 The third column of `INGRESS-AUTH.md` is the honest answer and also the reason it belongs here:
 a design that has not been implemented cannot be run. This is worth stating because the usual
