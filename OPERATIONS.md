@@ -42,13 +42,31 @@ CPU             16 cores, load average 0.86 / 1.10 / 1.10
 RAM             14 GiB total, 9.3 GiB available
 Disk            35 GiB used of 40 GiB  (93%)
 Network         residential uplink, no public IPv4, IPv6 present
-Ingress         Cloudflare Tunnel (outbound only, no port forwarding required)
+Ingress         two independent outbound paths — see §1.1
 ```
 
-The last two lines are the interesting part and the reason the stack looks the way it does: with
-no inbound port and a rotating address, every service has to be reachable through an outbound
-tunnel or not at all. That is a design constraint, not a shortcut — the same constraint that
-produced the per-environment ingress analysis in [`BOXPROXY.md`](BOXPROXY.md).
+### 1.1 Ingress: two outbound paths, no inbound port
+
+The host has **no public IPv4 and opens no inbound port**. Everything it serves is reached through
+a connection the host itself initiates. There are two of them, measured, not planned:
+
+| Path | What dials out | Uptime | Carries |
+|---|---|---|---|
+| CDN tunnel | a tunnel client container on the host | since 09-18 | the site and the API hostnames; TLS terminates at the CDN edge |
+| Cloud TCP relay | `frpc` on the host | 66d 19h, same age as the host | one raw TCP port, forwarded to the relay engine's listener |
+
+The second path is easy to miss when auditing a container list, because it terminates **outside
+Docker**: the forwarded port is served by a host-level process under user systemd, not by a
+container, so `docker port` never shows it and the container inventory never counts it. It was
+found by walking the listening sockets, resolving the owner PID, and reading the relay client's
+config — the only way to answer "what actually reaches this host from the internet" honestly, and
+a reminder that a container list is not a service inventory.
+
+They are not a redundant pair: a CDN fronting an HTTP hostname is not the same thing as a stable
+address for a raw TCP port, so each path carries a different service. What they share is the
+property that **no inbound port is ever opened on the host** — which is a design constraint, not a
+shortcut, and is the same constraint that produced the per-environment ingress analysis in
+[`BOXPROXY.md`](BOXPROXY.md).
 
 ## 2. Topology
 
@@ -56,8 +74,10 @@ Sixteen containers, five functional groups, one host.
 
 ```mermaid
 flowchart TB
-    U["users / API clients"] --> CF["Cloudflare edge<br/>TLS terminates here"]
-    CF -->|"outbound-published tunnel"| T["ingress tunnel"]
+    U["users / API clients"] --> CF["CDN edge<br/>TLS terminates here"]
+    CF -->|"tunnel published outbound"| T["ingress tunnel"]
+    U --> RL["cloud TCP relay<br/>accepts one port"]
+    RL -->|"forwarded by a client the host dials out"| ENGINE
     T --> FE["site frontend"]
     T --> API["relay API"]
     FE --> API
@@ -98,6 +118,62 @@ and "a system":
   account is a directory plus a key, picked up by a rescan loop within 15 s. Nothing restarts,
   nothing is re-scheduled, and the orchestrator holds no state that a backup would have to
   reconstruct.
+
+### 2.1 Network segmentation, as configured
+
+Sixteen containers are spread over five networks with four distinct `/16` subnets, rather than one
+flat bridge. The split is not decorative — it is the only reason the marketplace lab and the
+commercial stack can share a host without sharing an attack surface.
+
+| Network | Subnet | Containers | Why it exists |
+|---|---|---|---|
+| `host` | — | 7 | workloads that must reach a LAN address directly or bind a port without translation: the device-facing gateway, the capability tunnel, and four of the five lab containers |
+| relay network | `172.18.0.0/16` | 7 | the commercial path: engine, API, front end, perf collector, mail gateway, Postgres, Redis |
+| second bridge | `172.19.0.0/16` | 1 | created by the mail gateway's compose project; only the tunnel is attached, so it currently supplies a second address rather than a second route |
+| monitor network | `172.20.0.0/16` | 1 | monitoring reaches the lab without being routable from it |
+| site network | `172.21.0.0/16` | 1 | static front end, deliberately the only member |
+
+The row worth reading is the third one. **One container holds two addresses on two bridges at
+once** — the tunnel carries `172.18.0.5` and `172.19.0.2` simultaneously. Multi-homing is how two
+Docker networks are joined without `iptables` rules, without publishing a port and without putting
+either side on the host network; in orchestration vocabulary it is a multi-homed pod. One honest
+qualification: the second bridge has no other member today, so the attachment currently buys the
+container a second address and route rather than a join to a second set of services. The capability
+is configured; the second side of it is unused.
+
+Seven of sixteen containers run on the host network. That is a decision, and §2.2 records the one
+that is easiest to get wrong.
+
+### 2.2 Why the device-facing container is on the host network
+
+The payment gateway attaches to physical Android devices over the LAN. Its compose file sets
+`network_mode: host`, with the reason in the comment beside it: the device serial is a LAN
+address on port 5555, which is not routable from a Docker bridge.
+
+On a bridge, reaching that device requires `macvlan` (one parent interface per device subnet) or a
+host-network container. Host networking was chosen because it needs no per-device routing and no
+extra interface for every device VLAN.
+
+The alternative is in the file, commented out: `ADB_SERVER_SOCKET=tcp:172.17.0.1:5037` — the
+docker0 gateway, which is how a bridged container reaches an `adb server` running on the host
+instead of reaching the device directly. Recorded here because "we use host networking" with no
+alternative named reads like a default. Naming the alternative is what makes it a decision.
+
+### 2.3 What the segmentation is worth, and how it was checked
+
+Two claims, both testable rather than asserted:
+
+- **Stateful services are reachable from more than loopback, and rely on authentication.** Checked
+  by attempting an unauthenticated command against Redis and receiving `NOAUTH` — verified at the
+  service, not read off the compose file, because a port bound to an interface is only as safe as
+  what answers on it.
+- **Nothing is published that the ingress paths do not need.** `docker port` lists six containers
+  with published ports; of those, exactly one port is the one the cloud relay forwards. The rest
+  serve the host's own front-ends and the mail path, and none of them has a route to the internet
+  because the host has no public address to route through.
+
+The second claim is the one that changes with time, so it is a check to re-run, not a fact to
+remember: `docker port` plus the relay config is a two-command audit.
 
 ## 3. Deployment timeline, reconstructed from container creation times
 
@@ -247,7 +323,8 @@ down beforehand.
 |---|---|---|
 | Disk | 40 GiB, **93% used** | the binding constraint; see below |
 | RAM | 14 GiB, 9.3 GiB free | comfortable until the executor scales |
-| Public IPv4 | none | every ingress must be an outbound tunnel |
+| Public IPv4 on the host | none | every ingress path is a connection the host opens outward |
+| Inbound port on the host | none | the cloud relay, not the host, accepts the public connection |
 | Address stability | none (residential) | cannot host a protocol-level relay |
 | Full chain node | **not possible** | a Base/Ethereum full node needs 10²–10³ GiB |
 
@@ -295,6 +372,18 @@ done'
 ssh <host> 'docker stats --no-stream --format "{{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}"'
 ssh <host> 'docker system df'
 
+# network segmentation: which network each container sits on, and with which address
+ssh <host> 'for c in $(docker ps --format "{{.Names}}"); do
+  echo "$c $(docker inspect -f "{{.HostConfig.NetworkMode}}" $c) \
+$(docker inspect -f "{{range \$k,\$v := .NetworkSettings.Networks}}{{\$k}}={{\$v.IPAddress}} {{end}}" $c)"
+done'
+
+# what the host actually exposes, and to whom
+ssh <host> 'docker port $(docker ps -q) 2>/dev/null; ss -lntp'
+
+# ingress: which process accepts the forwarded port, and what forwards it
+ssh <host> 'ss -lntp | grep <forwarded-port>; ps -o etime=,cmd= -C frpc'
+
 # endpoint liveness (401 on the API is the healthy answer — it means auth is enforced)
 curl -s -o /dev/null -w '%{http_code} %{time_total}\n' https://<site>/
 curl -s -o /dev/null -w '%{http_code} %{time_total}\n' https://<api>/v1/models
@@ -312,6 +401,8 @@ time series. Recorded here because it cost an hour and would cost the next reade
 
 ## 8. What is deliberately not in this file
 
+- The cloud relay's address, region and control port, and the name of the service it forwards to.
+  §1.1 describes the pattern; a public address plus one open port is a target, not a credential.
 - The public domain name and the tunnel hostnames. The operational record stands on its own; tying
   a job application to a live commercial relay is a decision for its owner, not a side effect of
   publishing.
