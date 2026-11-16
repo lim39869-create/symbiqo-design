@@ -1,0 +1,8 @@
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Nothing here is generated, but keep the repo clean if that changes
+*.tmp
